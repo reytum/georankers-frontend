@@ -1,7 +1,6 @@
-// src/pages/Results.tsx
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
-import { useAuth } from "@/contexts/auth-context";
+// src/pages/ExampleResults.tsx
+import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -14,18 +13,7 @@ import {
   Minus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { getProductAnalytics } from "@/apiHelpers";
-
-interface InputStateAny {
-  product?: { id: string; name?: string; website?: string };
-  id?: string;
-  productId?: string;
-  website?: string;
-  search_keywords?: Array<{ id?: string; keyword: string }>;
-  keywords?: string[];
-  analytics?: any;
-}
+import exampleData from "@/data/mockInsights.json";
 
 interface InsightCard {
   title: string;
@@ -66,17 +54,11 @@ interface ResultsData {
   search_keywords: Array<{ id?: string; keyword: string }>;
 }
 
-export default function Results() {
+export default function ExampleResults() {
   const [resultsData, setResultsData] = useState<ResultsData | null>(null);
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
-
-  const { user } = useAuth();
-  const accessToken = localStorage.getItem("access_token") || "";
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const navigate = useNavigate();
-  const location = useLocation();
-  const pollingRef = useRef<{ productTimer?: number }>({});
-  const mountedRef = useRef(true);
 
   const getColorClass = (
     text?: string,
@@ -94,7 +76,6 @@ export default function Results() {
     if (lower.includes("low"))
       return `${baseClasses} text-white bg-green-600 border-green-500`;
 
-    // default fallback
     return `${baseClasses} text-gray-700 bg-gray-100 border-gray-300`;
   };
 
@@ -120,97 +101,50 @@ export default function Results() {
     });
   };
 
-  // Parse and normalize location.state
+  // Load example data on mount
   useEffect(() => {
-    mountedRef.current = true;
-    const state = (location.state || {}) as InputStateAny;
+    const loadExampleData = () => {
+      setTimeout(() => {
+        const mockData = exampleData as any;
 
-    if (state && state.product?.id) {
-      const normalized: ResultsData = {
-        website:
-          (state.website ||
-            state.product.website ||
-            state.product.name ||
-            "") + "",
-        product: {
-          id: state.product.id,
-          name: state.product.name || state.product.website || state.product.id,
-        },
-        search_keywords: (state.search_keywords || []).map((k) => ({
-          id: k.id,
-          keyword: k.keyword,
-        })),
-      };
-      setResultsData(normalized);
-    } else if ((state as any).productId || (state as any).id) {
-      const pid = (state as any).productId || (state as any).id;
-      const normalized: ResultsData = {
-        website: state.website || "",
-        product: { id: pid.toString(), name: state.website || pid.toString() },
-        search_keywords: Array.isArray(state.search_keywords)
-          ? state.search_keywords.map((k) => ({ id: k.id, keyword: k.keyword }))
-          : (state.keywords || []).map((k: string) => ({ keyword: k })),
-      };
-      setResultsData(normalized);
-    } else {
-      navigate("/input");
-    }
+        const exampleResultsData: ResultsData = {
+          website: mockData.website || "example",
+          product: {
+            id: mockData.id || "example-search-123",
+            name: mockData.product?.name || "Example Search",
+          },
+          search_keywords: [
+            { id: "1", keyword: "example search" },
+            { id: "2", keyword: "search engine" },
+            { id: "3", keyword: "web search" },
+          ],
+        };
 
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [location.state, navigate]);
+        const exampleAnalyticsData: AnalyticsData = {
+          id: mockData.id || "example-analytics-123",
+          type: mockData.type || "product_analytics",
+          status: "completed",
+          analytics: {
+            insight_cards: mockData.analytics?.insight_cards || [],
+            recommended_actions: mockData.analytics?.recommended_actions || [],
+            drilldowns: {
+              query_explorer: mockData.analytics?.drilldowns?.query_explorer || [],
+              sources_list: mockData.analytics?.drilldowns?.sources_list || [],
+              attributes_matrix: mockData.analytics?.drilldowns?.attributes_matrix || [],
+            },
+          },
+          created_at: mockData.created_at || new Date().toISOString(),
+          updated_at: mockData.updated_at || new Date().toISOString(),
+        };
 
-  // Cleanup timers on unmount
-  useEffect(() => {
-    return () => {
-      mountedRef.current = false;
-      if (pollingRef.current.productTimer) {
-        clearTimeout(pollingRef.current.productTimer);
-      }
-    };
-  }, []);
-
-  // Poll product analytics
-  const pollProductAnalytics = useCallback(
-    async (productId: string) => {
-      if (!productId || !accessToken || !mountedRef.current) return;
-      try {
-        setIsLoading(true);
-        const today = new Date().toISOString().split("T")[0];
-        const res = await getProductAnalytics(productId, today, accessToken);
-        if (!mountedRef.current) return;
-
-        if (res) setAnalyticsData(res);
-
-        const status = res?.status?.toLowerCase() || "";
-        if (status !== "completed") {
-          if (pollingRef.current.productTimer) {
-            clearTimeout(pollingRef.current.productTimer);
-          }
-          pollingRef.current.productTimer = window.setTimeout(() => {
-            pollProductAnalytics(productId);
-          }, 5000);
-        } else {
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.error(err);
-        toast.error("Failed to fetch analytics");
+        setResultsData(exampleResultsData);
+        setAnalyticsData(exampleAnalyticsData);
         setIsLoading(false);
-      }
-    },
-    [accessToken]
-  );
+      }, 1000);
+    };
 
-  useEffect(() => {
-    if (resultsData?.product?.id) {
-      if (pollingRef.current.productTimer) {
-        clearTimeout(pollingRef.current.productTimer);
-      }
-      pollProductAnalytics(resultsData.product.id);
-    }
-  }, [resultsData, pollProductAnalytics]);
+    loadExampleData();
+  }, []);
 
   // Loading state
   if (isLoading || !resultsData) {
@@ -220,9 +154,9 @@ export default function Results() {
           <div className="flex items-center justify-center min-h-64">
             <div className="text-center">
               <Search className="w-16 h-16 mx-auto text-muted-foreground mb-4 animate-spin" />
-              <h2 className="text-2xl font-bold mb-2">Analyzing...</h2>
+              <h2 className="text-2xl font-bold mb-2">Loading Example...</h2>
               <p className="text-muted-foreground">
-                Please wait while we prepare your results.
+                Please wait while we prepare your example results.
               </p>
             </div>
           </div>
@@ -231,7 +165,7 @@ export default function Results() {
     );
   }
 
-  const overallStatus = analyticsData?.status || "pending";
+  const overallStatus = analyticsData?.status || "completed";
 
   return (
     <Layout>
@@ -249,9 +183,14 @@ export default function Results() {
                   <h1 className="font-semibold text-lg">
                     {resultsData.website || resultsData.product.name}
                   </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Analysis completed on {formatDate(analyticsData?.updated_at)}
-                  </p>
+                  <div className="flex items-center space-x-2">
+                    <p className="text-sm text-muted-foreground">
+                      Example analysis completed on {formatDate(analyticsData?.updated_at)}
+                    </p>
+                    <Badge variant="secondary" className="text-xs">
+                      DEMO
+                    </Badge>
+                  </div>
                 </div>
               </div>
 
@@ -259,9 +198,7 @@ export default function Results() {
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm">
                 <div className="flex items-center space-x-2">
                   <Search className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    Keywords analyzed:
-                  </span>
+                  <span className="text-muted-foreground">Keywords analyzed:</span>
                   <span className="font-semibold">
                     {resultsData.search_keywords?.length ?? 0}
                   </span>
@@ -289,22 +226,21 @@ export default function Results() {
             </Button>
           </div>
 
-          {/* Show banner when analyzing */}
-          {overallStatus !== "completed" && (
-            <div className="mb-6 p-4 rounded-md bg-yellow-50 border border-yellow-200 text-sm">
-              <div className="flex items-center gap-3">
-                <Search className="w-5 h-5 animate-spin text-muted-foreground" />
-                <div>
-                  <div className="font-semibold">Analysis in progress</div>
-                  <div className="text-xs text-muted-foreground">
-                    We are gathering and analyzing AI answers — this usually
-                    takes a few seconds to a couple of minutes depending on
-                    keywords and sources.
-                  </div>
+          {/* Example banner */}
+          <div className="mb-6 p-4 rounded-md bg-blue-50 border border-blue-200 text-sm">
+            <div className="flex items-center gap-3">
+              <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white text-xs font-bold">
+                !
+              </div>
+              <div>
+                <div className="font-semibold text-blue-900">Example Results</div>
+                <div className="text-xs text-blue-700">
+                  This is a demonstration of our analysis capabilities using sample data. 
+                  Start your own analysis to see real insights for your product.
                 </div>
               </div>
             </div>
-          )}
+          </div>
 
           {/* Content */}
           {analyticsData ? (
@@ -527,7 +463,7 @@ export default function Results() {
             </>
           ) : (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">No analytics data available</p>
+              <p className="text-muted-foreground">No example data available</p>
             </div>
           )}
         </div>

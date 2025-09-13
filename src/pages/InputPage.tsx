@@ -200,10 +200,10 @@ export default function InputPage() {
   };
 
   const showExampleOutput = () => {
-    navigate("/results", {
+    navigate("/example-results", {
       state: {
-        website: "kommunicate.io",
-        keywords: ["customer support", "live chat", "chatbot"],
+        website: "google.com",
+        keywords: ["correctness", "search speed", "recommendation"],
         isExample: true,
       },
     });
