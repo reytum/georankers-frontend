@@ -19,16 +19,61 @@ import {
   CheckCircle,
   Zap,
 } from "lucide-react";
+import { getProductsByApplication } from "@/apiHelpers";
 
 const Index = () => {
   const { user, isLoading } = useAuth();
   const navigate = useNavigate();
 
-  const handleCheckVisibility = () => {
-    if (user) {
-      navigate("/input");
-    } else {
+  const handleCheckVisibility = async () => {
+    console.log("handleCheckVisibility called");
+    
+    if (!user) {
+      console.log("No user, redirecting to login");
+      // Not logged in → go to login
       navigate("/login");
+      return;
+    }
+  
+    try {
+      const accessToken = localStorage.getItem("access_token") || "";
+      const applicationId = localStorage.getItem("application_id") || "";
+      
+      console.log("Access token:", accessToken ? "present" : "missing");
+      console.log("Application ID:", applicationId || "missing");
+  
+      if (!applicationId) {
+        console.log("No application ID, redirecting to input");
+        // No application ID → go to input
+        navigate("/input");
+        return;
+      }
+  
+      console.log("Calling getProductsByApplication with:", { applicationId, accessToken: accessToken ? "present" : "missing" });
+      const products = await getProductsByApplication(applicationId, accessToken);
+      console.log("getProductsByApplication response:", products);
+  
+      if (products && Array.isArray(products) && products.length > 0) {
+        const firstProduct = products[0];
+        console.log("First product:", firstProduct);
+  
+        // Store product id
+        localStorage.setItem("product_id", firstProduct.id);
+  
+        // Navigate directly to results with just the product ID
+        navigate("/results", {
+          state: {
+            productId: firstProduct.id,
+          },
+        });
+      } else {
+        console.log("No products found, redirecting to input");
+        // No products → go to input page
+        navigate("/input");
+      }
+    } catch (error) {
+      console.error("Error checking products:", error);
+      navigate("/input"); // fallback
     }
   };
 
@@ -99,16 +144,15 @@ const Index = () => {
               </p>
               <div className="flex flex-col sm:flex-row gap-4 justify-center">
                 {user ? (
-                  <Link to="/input" className="w-full sm:w-auto">
-                    <Button
-                      variant="hero"
-                      size="lg"
-                      className="text-lg px-8 w-full sm:w-auto"
-                    >
-                      New Analysis
-                      <ArrowRight className="w-5 h-5 ml-2" />
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="hero"
+                    size="lg"
+                    className="text-lg px-8 w-full sm:w-auto"
+                    onClick={handleCheckVisibility}
+                  >
+                    New Analysis
+                    <ArrowRight className="w-5 h-5 ml-2" />
+                  </Button>
                 ) : (
                   <>
                     <Link to="/register" className="w-full sm:w-auto">

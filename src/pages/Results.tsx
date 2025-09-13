@@ -1,156 +1,189 @@
-import { useEffect, useState } from "react";
+// src/pages/Results.tsx
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { Layout } from "@/components/Layout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, Search, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import {
+  ArrowLeft,
+  Calendar,
+  Search,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { getProductAnalytics, getKeywordAnalytics } from "@/apiHelpers";
+import { getProductAnalytics } from "@/apiHelpers";
 
-interface ResultsData {
-  website: string;
-  keywords: string[];
-  product: {
-    id: string;
-    name: string;
-  };
-  search_keywords: Array<{
-    id: string;
-    keyword: string;
-  }>;
+interface InputStateAny {
+  product?: { id: string; name?: string; website?: string };
+  id?: string;
+  productId?: string;
+  website?: string;
+  search_keywords?: Array<{ id?: string; keyword: string }>;
+  keywords?: string[];
   isExample?: boolean;
+  analytics?: any;
 }
 
 interface InsightCard {
   title: string;
   value: string;
-  trend: "up" | "down" | "stable";
-  description: string;
-  icon: string;
+  trend?: "up" | "down" | "stable" | "unknown";
+  description?: string;
 }
 
 interface RecommendedAction {
   category: string;
-  priority: "high" | "medium" | "low";
-  action: string;
-  impact: string;
-  effort: "high" | "medium" | "low";
+  priority?: string;
+  action?: string;
+  impact?: string;
+  effort?: string;
 }
 
 interface AnalyticsData {
-  id: string;
-  type: string;
-  status: string;
-  analytics: {
-    insight_cards: InsightCard[];
-    recommended_actions: RecommendedAction[];
-    drilldowns: {
-      query_explorer: Array<{
-        query: string;
-        performance_score: number;
-        search_volume: string;
-        competition: string;
-      }>;
-      sources_list: Array<{
-        source: string;
-        frequency: number;
-        relevance_score: number;
-        url: string;
-      }>;
-      attributes_matrix: Array<{
-        attribute: string;
-        value: string;
-        frequency: number;
-        importance: string;
-      }>;
+  id?: string;
+  type?: string;
+  status?: string;
+  analytics?: {
+    insight_cards?: InsightCard[];
+    recommended_actions?: RecommendedAction[];
+    drilldowns?: {
+      query_explorer?: any[];
+      sources_list?: any[];
+      attributes_matrix?: any[];
     };
     reason_missing?: string;
   };
-  created_at: string;
-  updated_at: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+interface ResultsData {
+  website: string;
+  product: { id: string; name?: string };
+  search_keywords: Array<{ id?: string; keyword: string }>;
+  isExample?: boolean;
 }
 
 export default function Results() {
   const [resultsData, setResultsData] = useState<ResultsData | null>(null);
-  const [currentTab, setCurrentTab] = useState("overall");
+  const [currentTab, setCurrentTab] = useState<string>("overall");
   const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
-  const [keywordAnalytics, setKeywordAnalytics] = useState<Record<string, AnalyticsData>>({});
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+
   const { user } = useAuth();
-  const accessToken = localStorage.getItem("access_token");
+  const accessToken = localStorage.getItem("access_token") || "";
   const navigate = useNavigate();
   const location = useLocation();
+  const pollingRef = useRef<{ productTimer?: number }>({});
+  const mountedRef = useRef(true);
 
-  // Fetch overall analytics data
-  const fetchOverallAnalytics = async () => {
-    if (!resultsData || !accessToken) return;
-
-    setIsLoading(true);
-    try {
-      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD format
-      const response = await getProductAnalytics(resultsData.product.id, today, accessToken);
-      setAnalyticsData(response);
-    } catch (error) {
-      console.error("Error fetching overall analytics:", error);
-      toast.error("Failed to load overall analytics");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Fetch keyword analytics data
-  const fetchKeywordAnalytics = async (keywordId: string) => {
-    if (!accessToken || keywordAnalytics[keywordId]) return;
-
-    try {
-      const today = new Date().toISOString().split("T")[0];
-      const response = await getKeywordAnalytics(keywordId, today, accessToken);
-      setKeywordAnalytics((prev) => ({
-        ...prev,
-        [keywordId]: response,
-      }));
-    } catch (error) {
-      console.error("Error fetching keyword analytics:", error);
-      toast.error("Failed to load keyword analytics");
-    }
-  };
-
+  // Parse and normalize location.state
   useEffect(() => {
-    if (!user) {
-      navigate("/login");
-      return;
-    }
+    mountedRef.current = true;
+    const state = (location.state || {}) as InputStateAny;
 
-    if (location.state) {
-      const data = location.state as ResultsData;
-      setResultsData(data);
+    if (state && state.product?.id) {
+      const normalized: ResultsData = {
+        website:
+          (state.website ||
+            state.product.website ||
+            state.product.name ||
+            "") + "",
+        product: {
+          id: state.product.id,
+          name: state.product.name || state.product.website || state.product.id,
+        },
+        search_keywords: (state.search_keywords || []).map((k) => ({
+          id: k.id,
+          keyword: k.keyword,
+        })),
+        isExample: !!state.isExample,
+      };
+      setResultsData(normalized);
+    } else if ((state as any).productId || (state as any).id) {
+      const pid = (state as any).productId || (state as any).id;
+      const normalized: ResultsData = {
+        website: state.website || "",
+        product: { id: pid.toString(), name: state.website || pid.toString() },
+        search_keywords: Array.isArray(state.search_keywords)
+          ? state.search_keywords.map((k) => ({ id: k.id, keyword: k.keyword }))
+          : (state.keywords || []).map((k: string) => ({ keyword: k })),
+        isExample: !!state.isExample,
+      };
+      setResultsData(normalized);
     } else {
       navigate("/input");
     }
-  }, [user, navigate, location.state]);
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [location.state, navigate]);
+
+  // Cleanup timers on unmount
+  useEffect(() => {
+    return () => {
+      mountedRef.current = false;
+      if (pollingRef.current.productTimer) {
+        clearTimeout(pollingRef.current.productTimer);
+      }
+    };
+  }, []);
+
+  // Poll product analytics
+  const pollProductAnalytics = useCallback(
+    async (productId: string) => {
+      if (!productId || !accessToken || !mountedRef.current) return;
+      try {
+        setIsLoading(true);
+        const today = new Date().toISOString().split("T")[0];
+        const res = await getProductAnalytics(productId, today, accessToken);
+        if (!mountedRef.current) return;
+
+        if (res) setAnalyticsData(res);
+
+        const status = res?.status?.toLowerCase() || "";
+        if (status !== "completed") {
+          if (pollingRef.current.productTimer) {
+            clearTimeout(pollingRef.current.productTimer);
+          }
+          pollingRef.current.productTimer = window.setTimeout(() => {
+            pollProductAnalytics(productId);
+          }, 5000);
+        } else {
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to fetch overall analytics");
+        setIsLoading(false);
+      }
+    },
+    [accessToken]
+  );
 
   useEffect(() => {
-    if (resultsData && currentTab === "overall") {
-      fetchOverallAnalytics();
+    if (resultsData?.product?.id && currentTab === "overall") {
+      if (pollingRef.current.productTimer) {
+        clearTimeout(pollingRef.current.productTimer);
+      }
+      pollProductAnalytics(resultsData.product.id);
     }
-  }, [resultsData, currentTab]);
+  }, [resultsData, currentTab, pollProductAnalytics]);
 
   const handleTabChange = (tab: string) => {
     setCurrentTab(tab);
-
-    if (tab.startsWith("keyword-")) {
-      const keywordIndex = parseInt(tab.split("-")[1]);
-      const keyword = resultsData?.search_keywords?.[keywordIndex];
-      if (keyword) fetchKeywordAnalytics(keyword.id);
-    } else if (tab === "overall") {
-      fetchOverallAnalytics();
+    if (tab === "overall" && resultsData?.product?.id) {
+      pollProductAnalytics(resultsData.product.id);
     }
   };
 
   const getTrendIcon = (trend?: string) => {
-    switch (trend) {
+    switch ((trend || "").toLowerCase()) {
       case "up":
         return <TrendingUp className="w-4 h-4 text-green-500" />;
       case "down":
@@ -161,7 +194,7 @@ export default function Results() {
   };
 
   const getPriorityColor = (priority?: string) => {
-    switch (priority) {
+    switch ((priority || "").toLowerCase()) {
       case "high":
         return "destructive";
       case "medium":
@@ -171,8 +204,9 @@ export default function Results() {
     }
   };
 
-  const formatDate = () => {
-    return new Date().toLocaleDateString("en-US", {
+  const formatDate = (iso?: string) => {
+    const d = iso ? new Date(iso) : new Date();
+    return d.toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
@@ -181,21 +215,27 @@ export default function Results() {
     });
   };
 
+  // ----------------- RENDER -----------------
   if (!resultsData) {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-20">
           <div className="flex items-center justify-center min-h-64">
             <div className="text-center">
-              <Search className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
-              <h2 className="text-2xl font-bold mb-2">Loading Analysis...</h2>
-              <p className="text-muted-foreground">Please wait while we prepare your results.</p>
+              <Search className="w-16 h-16 mx-auto text-muted-foreground mb-4 animate-spin" />
+              <h2 className="text-2xl font-bold mb-2">Analyzing...</h2>
+              <p className="text-muted-foreground">
+                Please wait while we prepare your results.
+              </p>
             </div>
           </div>
         </div>
       </Layout>
     );
   }
+
+  const overallStatus = analyticsData?.status || "pending";
+  const overallInProgress = overallStatus !== "completed";
 
   return (
     <Layout>
@@ -207,11 +247,19 @@ export default function Results() {
               {/* Brand Info */}
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-gradient-hero flex items-center justify-center text-white font-bold">
-                  {resultsData.website?.charAt(0).toUpperCase()}
+                  {resultsData.website?.charAt(0)?.toUpperCase() || "?"}
                 </div>
                 <div>
-                  <h1 className="font-semibold text-lg">{resultsData.website}</h1>
-                  <p className="text-sm text-muted-foreground">These insights come directly from AI answers.</p>
+                  <h1 className="font-semibold text-lg">
+                    {resultsData.website || resultsData.product.name}
+                  </h1>
+                  <p className="text-sm text-muted-foreground">
+                    {overallInProgress
+                      ? `Analysis ${overallStatus}`
+                      : `Analysis completed on ${formatDate(
+                          analyticsData?.updated_at
+                        )}`}
+                  </p>
                 </div>
               </div>
 
@@ -219,22 +267,25 @@ export default function Results() {
               <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm">
                 <div className="flex items-center space-x-2">
                   <Search className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Keywords analyzed:</span>
-                  <span className="font-semibold">{resultsData.search_keywords?.length || 0}</span>
+                  <span className="text-muted-foreground">
+                    Keywords analyzed:
+                  </span>
+                  <span className="font-semibold">
+                    {resultsData.search_keywords?.length ?? 0}
+                  </span>
                 </div>
                 <div className="flex items-center space-x-2">
                   <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Generated:</span>
-                  <span className="font-semibold">{formatDate()}</span>
+                  <span className="text-muted-foreground">Status:</span>
+                  <span className="font-semibold">{overallStatus}</span>
                 </div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Main Content */}
+        {/* Main */}
         <div className="container mx-auto px-4 py-8">
-          {/* Back Navigation */}
           <div className="mb-6">
             <Button
               variant="ghost"
@@ -246,20 +297,24 @@ export default function Results() {
             </Button>
           </div>
 
-          {/* Keywords Menu */}
-          <div className="mb-6">
+          {/* Keyword navigation */}
+          {/* <div className="mb-6">
             <div className="bg-card border rounded-lg p-4">
-              <h3 className="text-sm font-medium text-muted-foreground mb-3">Navigate by Keyword</h3>
+              <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                Navigate by Keyword
+              </h3>
               <div className="flex flex-wrap gap-2">
-                {resultsData.search_keywords?.map((keyword, index) => (
+                {resultsData.search_keywords?.map((k, idx) => (
                   <Button
-                    key={index}
-                    variant={currentTab === `keyword-${index}` ? "default" : "outline"}
+                    key={`${k.keyword}-${idx}`}
+                    variant={
+                      currentTab === `keyword-${idx}` ? "default" : "outline"
+                    }
                     size="sm"
-                    onClick={() => handleTabChange(`keyword-${index}`)}
+                    onClick={() => handleTabChange(`keyword-${idx}`)}
                     className="text-sm"
                   >
-                    {keyword.keyword}
+                    {k.keyword}
                   </Button>
                 ))}
                 <Button
@@ -272,217 +327,406 @@ export default function Results() {
                 </Button>
               </div>
             </div>
-          </div>
+          </div> */}
 
-          {/* Render overall or keyword-specific content */}
+          {/* show banner when overall analyzing */}
+          {overallInProgress && (
+            <div className="mb-6 p-4 rounded-md bg-yellow-50 border border-yellow-200 text-sm">
+              <div className="flex items-center gap-3">
+                <Search className="w-5 h-5 animate-spin text-muted-foreground" />
+                <div>
+                  <div className="font-semibold">Analysis in progress</div>
+                  <div className="text-xs text-muted-foreground">
+                    We are gathering and analyzing AI answers — this usually
+                    takes a few seconds to a couple of minutes depending on
+                    keywords and sources.
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Content */}
           {currentTab === "overall" ? (
-            <div>
+            <>
               {isLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="text-center">
                     <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-spin" />
-                    <p className="text-muted-foreground">Loading analytics...</p>
+                    <p className="text-muted-foreground">
+                      Loading analytics...
+                    </p>
                   </div>
                 </div>
-              ) : (
+              ) : analyticsData ? (
                 <>
-                  {/* Insight Cards */}
                   <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-                    {analyticsData?.analytics?.insight_cards?.map((card, index) => (
-                      <Card key={index} className="card-gradient border-0">
-                        <CardContent className="p-6">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center space-x-2">
-                              <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full"></div>
-                              <span className="text-sm font-medium">{card.title}</span>
+                    {(analyticsData.analytics?.insight_cards || []).length >
+                    0 ? (
+                      analyticsData.analytics!.insight_cards!.map((card, i) => (
+                        <Card key={i} className="card-gradient border-0">
+                          <CardContent className="p-6">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center space-x-2">
+                                <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" />
+                                <span className="text-sm font-medium">
+                                  {card.title}
+                                </span>
+                              </div>
+                              {getTrendIcon(card.trend)}
                             </div>
-                            {getTrendIcon(card.trend)}
-                          </div>
-                          <div className="text-lg font-semibold mb-2">{card.value}</div>
-                          <p className="text-xs text-muted-foreground">{card.description}</p>
-                        </CardContent>
-                      </Card>
-                    ))}
+                            <div className="text-lg font-semibold mb-2">
+                              {card.value || "—"}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {card.description}
+                            </p>
+                          </CardContent>
+                        </Card>
+                      ))
+                    ) : (
+                      <p className="text-muted-foreground text-sm">
+                        No insight cards available
+                      </p>
+                    )}
                   </div>
 
-                  {/* Recommended Actions */}
                   <Card className="card-gradient border-0 mb-8">
                     <CardContent className="p-6">
-                      <h3 className="text-xl font-semibold mb-4">Recommended Actions</h3>
+                      <h3 className="text-xl font-semibold mb-4">
+                        Recommended Actions
+                      </h3>
                       <div className="space-y-4">
-                        {analyticsData?.analytics?.recommended_actions?.map((action, index) => (
-                          <div key={index} className="p-4 rounded-lg bg-accent/50">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <Badge variant={getPriorityColor(action.priority) as any}>{action.priority.toUpperCase()}</Badge>
-                              <span className="font-semibold">{action.category}</span>
-                              <Badge variant="outline">{action.effort} effort</Badge>
-                            </div>
-                            <p className="text-sm mb-2">{action.action}</p>
-                            <p className="text-xs text-muted-foreground">{action.impact}</p>
-                          </div>
-                        ))}
+                        {(analyticsData.analytics?.recommended_actions || [])
+                          .length > 0 ? (
+                          analyticsData.analytics!.recommended_actions!.map(
+                            (action, i) => (
+                              <div
+                                key={i}
+                                className="p-4 rounded-lg bg-accent/50"
+                              >
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <Badge
+                                    variant={
+                                      getPriorityColor(action.priority) as any
+                                    }
+                                  >
+                                    {(action.priority || "").toUpperCase()}
+                                  </Badge>
+                                  <span className="font-semibold">
+                                    {action.category}
+                                  </span>
+                                  <Badge variant="outline">
+                                    {action.effort} effort
+                                  </Badge>
+                                </div>
+                                <p className="text-sm mb-2">{action.action}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  {action.impact}
+                                </p>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <p className="text-muted-foreground text-sm">
+                            No recommended actions
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Drilldowns */}
                   <div className="grid gap-6 md:grid-cols-2 mb-8">
-                    {/* Query Explorer */}
                     <Card className="card-gradient border-0">
                       <CardContent className="p-6">
                         <h3 className="font-semibold mb-4">Query Explorer</h3>
                         <div className="space-y-3">
-                          {analyticsData?.analytics?.drilldowns?.query_explorer?.slice(0, 8).map((query, index) => (
-                            <div key={index} className="flex items-start space-x-2">
-                              <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0 mt-1">
-                                {query.performance_score}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm">{query.query}</p>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <Badge variant="outline" className="text-xs">{query.search_volume}</Badge>
-                                  <Badge variant="outline" className="text-xs">{query.competition}</Badge>
+                          {(
+                            analyticsData.analytics?.drilldowns
+                              ?.query_explorer || []
+                          ).length > 0 ? (
+                            analyticsData
+                              .analytics!.drilldowns!.query_explorer!.slice(
+                                0,
+                                8
+                              )
+                              .map((q, idx) => (
+                                <div
+                                  key={idx}
+                                  className="flex items-start space-x-2"
+                                >
+                                  <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0 mt-1">
+                                    {q.performance_score}
+                                  </div>
+                                  <div className="flex-1">
+                                    <p className="text-sm">{q.query}</p>
+                                    <div className="flex items-center space-x-2 mt-1">
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {q.search_volume}
+                                      </Badge>
+                                      <Badge
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {q.competition}
+                                      </Badge>
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          )) || <p className="text-muted-foreground text-sm">No queries found</p>}
+                              ))
+                          ) : (
+                            <p className="text-muted-foreground text-sm">
+                              No queries found
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
 
-                    {/* Sources List */}
                     <Card className="card-gradient border-0">
                       <CardContent className="p-6">
                         <h3 className="font-semibold mb-4">Top Sources</h3>
                         <div className="space-y-3">
-                          {analyticsData?.analytics?.drilldowns?.sources_list?.map((source, index) => (
-                            <div key={index} className="flex items-center justify-between">
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">{source.source}</p>
-                                <p className="text-xs text-muted-foreground">{source.url}</p>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant="outline">{source.frequency}</Badge>
-                                <div className="w-16 h-2 bg-muted rounded-full">
-                                  <div
-                                    className="h-full bg-primary rounded-full"
-                                    style={{ width: `${Math.min((source.relevance_score / 10) * 100, 100)}%` }}
-                                  ></div>
+                          {(
+                            analyticsData.analytics?.drilldowns?.sources_list ||
+                            []
+                          ).length > 0 ? (
+                            analyticsData.analytics!.drilldowns!.sources_list!.map(
+                              (source, i) => (
+                                <div
+                                  key={i}
+                                  className="flex items-center justify-between"
+                                >
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium">
+                                      {source.source}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {source.url}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center space-x-2">
+                                    <Badge variant="outline">
+                                      {source.frequency}
+                                    </Badge>
+                                    <div className="w-16 h-2 bg-muted rounded-full">
+                                      <div
+                                        className="h-full bg-primary rounded-full"
+                                        style={{
+                                          width: `${Math.min(
+                                            (source.relevance_score / 10) * 100,
+                                            100
+                                          )}%`,
+                                        }}
+                                      />
+                                    </div>
+                                  </div>
                                 </div>
-                              </div>
-                            </div>
-                          )) || <p className="text-muted-foreground text-sm">No sources found</p>}
+                              )
+                            )
+                          ) : (
+                            <p className="text-muted-foreground text-sm">
+                              No sources found
+                            </p>
+                          )}
                         </div>
                       </CardContent>
                     </Card>
                   </div>
 
-                  {/* Attributes Matrix */}
                   <Card className="card-gradient border-0">
                     <CardContent className="p-6">
                       <h3 className="font-semibold mb-4">Key Attributes</h3>
                       <div className="grid gap-4 md:grid-cols-2">
-                        {analyticsData?.analytics?.drilldowns?.attributes_matrix?.map((attr, index) => (
-                          <div key={index} className="p-4 rounded-lg bg-accent/30">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-medium">{attr.attribute}</h4>
-                              <Badge variant={attr.importance === "high" ? "default" : "outline"}>{attr.importance}</Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-2">{attr.value}</p>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-xs">Frequency:</span>
-                              <Badge variant="outline">{attr.frequency}</Badge>
-                            </div>
-                          </div>
-                        )) || <p className="text-muted-foreground text-sm">No attributes found</p>}
+                        {(
+                          analyticsData.analytics?.drilldowns
+                            ?.attributes_matrix || []
+                        ).length > 0 ? (
+                          analyticsData.analytics!.drilldowns!.attributes_matrix!.map(
+                            (attr, i) => (
+                              <div
+                                key={i}
+                                className="p-4 rounded-lg bg-accent/30"
+                              >
+                                <div className="flex items-center justify-between mb-2">
+                                  <h4 className="font-medium">
+                                    {attr.attribute}
+                                  </h4>
+                                  <Badge
+                                    variant={
+                                      attr.importance === "high"
+                                        ? "default"
+                                        : "outline"
+                                    }
+                                  >
+                                    {attr.importance}
+                                  </Badge>
+                                </div>
+                                <p className="text-sm text-muted-foreground mb-2">
+                                  {attr.value}
+                                </p>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-xs">Frequency:</span>
+                                  <Badge variant="outline">
+                                    {attr.frequency}
+                                  </Badge>
+                                </div>
+                              </div>
+                            )
+                          )
+                        ) : (
+                          <p className="text-muted-foreground text-sm">
+                            No attributes found
+                          </p>
+                        )}
                       </div>
                     </CardContent>
                   </Card>
                 </>
+              ) : (
+                <div className="text-center py-12">
+                  <p className="text-muted-foreground">
+                    No analytics data available
+                  </p>
+                </div>
               )}
-            </div>
-          ) : (
-            <KeywordTab
-              currentTab={currentTab}
-              resultsData={resultsData}
-              keywordAnalytics={keywordAnalytics}
-              getTrendIcon={getTrendIcon}
-              getPriorityColor={getPriorityColor}
-            />
-          )}
+            </>
+          ) : (<></>)
+          // (
+          //   <KeywordTab
+          //     currentTab={currentTab}
+          //     resultsData={resultsData}
+          //     keywordAnalytics={keywordAnalytics}
+          //     getTrendIcon={getTrendIcon}
+          //     getPriorityColor={getPriorityColor}
+          //   />
+          // )
+          }
         </div>
       </div>
     </Layout>
   );
 }
 
-// Optional: Move keyword-specific rendering to a separate component
-function KeywordTab({
-  currentTab,
-  resultsData,
-  keywordAnalytics,
-  getTrendIcon,
-  getPriorityColor,
-}: any) {
-  const keywordIndex = parseInt(currentTab.split("-")[1]);
-  const keyword = resultsData.search_keywords?.[keywordIndex];
-  const keywordData = keyword ? keywordAnalytics[keyword.id] : null;
+/* KeywordTab component (extract) */
+// function KeywordTab({
+//   currentTab,
+//   resultsData,
+//   keywordAnalytics,
+//   getTrendIcon,
+//   getPriorityColor,
+// }: any) {
+//   const idx = parseInt(currentTab.split("-")[1], 10);
+//   const keyword = resultsData.search_keywords?.[idx];
+//   const data = keyword?.id ? keywordAnalytics[keyword.id] : null;
 
-  if (!keyword) return null;
+//   if (!keyword) return null;
 
-  return (
-    <div className="space-y-8">
-      <div className="text-center mb-6">
-        <h3 className="text-2xl font-semibold mb-2">Insights for "{keyword.keyword}"</h3>
-        <p className="text-muted-foreground">Deep dive analysis for this keyword</p>
-      </div>
+//   return (
+//     <div className="space-y-8">
+//       <div className="text-center mb-6">
+//         <h3 className="text-2xl font-semibold mb-2">
+//           Insights for "{keyword.keyword}"
+//         </h3>
+//         <p className="text-muted-foreground">
+//           Deep dive analysis for this keyword
+//         </p>
+//       </div>
 
-      {keywordData ? (
-        <>
-          {/* Insight Cards */}
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-            {keywordData?.analytics?.insight_cards?.map((card, index) => (
-              <Card key={index} className="card-gradient border-0">
-                <CardContent className="p-6">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center space-x-2">
-                      <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-full"></div>
-                      <span className="text-sm font-medium">{card.title}</span>
-                    </div>
-                    {getTrendIcon(card.trend)}
-                  </div>
-                  <div className="text-lg font-semibold mb-2">{card.value}</div>
-                  <p className="text-xs text-muted-foreground">{card.description}</p>
-                </CardContent>
-              </Card>
-            )) || <p className="text-muted-foreground text-sm">No insight cards found</p>}
-          </div>
+//       {keyword?.id ? (
+//         data ? (
+//           <>
+//             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
+//               {(data.analytics?.insight_cards || []).length > 0 ? (
+//                 data.analytics!.insight_cards!.map((card: any, i: number) => (
+//                   <Card key={i} className="card-gradient border-0">
+//                     <CardContent className="p-6">
+//                       <div className="flex items-center justify-between mb-3">
+//                         <div className="flex items-center space-x-2">
+//                           <div className="w-3 h-3 bg-gradient-to-r from-green-500 to-green-600 rounded-full" />
+//                           <span className="text-sm font-medium">
+//                             {card.title}
+//                           </span>
+//                         </div>
+//                         {getTrendIcon(card.trend)}
+//                       </div>
+//                       <div className="text-lg font-semibold mb-2">
+//                         {card.value || "—"}
+//                       </div>
+//                       <p className="text-xs text-muted-foreground">
+//                         {card.description}
+//                       </p>
+//                     </CardContent>
+//                   </Card>
+//                 ))
+//               ) : (
+//                 <p className="text-muted-foreground text-sm">
+//                   No insight cards found
+//                 </p>
+//               )}
+//             </div>
 
-          {/* Recommended Actions */}
-          <Card className="card-gradient border-0 mb-8">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-semibold mb-4">Recommended Actions</h3>
-              <div className="space-y-4">
-                {keywordData?.analytics?.recommended_actions?.map((action, index) => (
-                  <div key={index} className="p-4 rounded-lg bg-accent/50">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <Badge variant={getPriorityColor(action.priority) as any}>{action.priority?.toUpperCase()}</Badge>
-                      <span className="font-semibold">{action.category}</span>
-                      <Badge variant="outline">{action.effort} effort</Badge>
-                    </div>
-                    <p className="text-sm mb-2">{action.action}</p>
-                    <p className="text-xs text-muted-foreground">{action.impact}</p>
-                  </div>
-                )) || <p className="text-muted-foreground text-sm">No recommended actions</p>}
-              </div>
-            </CardContent>
-          </Card>
-        </>
-      ) : (
-        <div className="text-center py-12">
-          <p className="text-muted-foreground">Loading analytics for this keyword...</p>
-        </div>
-      )}
-    </div>
-  );
-}
+//             <Card className="card-gradient border-0 mb-8">
+//               <CardContent className="p-6">
+//                 <h3 className="text-xl font-semibold mb-4">
+//                   Recommended Actions
+//                 </h3>
+//                 <div className="space-y-4">
+//                   {(data.analytics?.recommended_actions || []).length > 0 ? (
+//                     data.analytics!.recommended_actions!.map(
+//                       (action: any, i: number) => (
+//                         <div key={i} className="p-4 rounded-lg bg-accent/50">
+//                           <div className="flex items-center space-x-2 mb-2">
+//                             <Badge
+//                               variant={getPriorityColor(action.priority) as any}
+//                             >
+//                               {(action.priority || "").toUpperCase()}
+//                             </Badge>
+//                             <span className="font-semibold">
+//                               {action.category}
+//                             </span>
+//                             <Badge variant="outline">
+//                               {action.effort} effort
+//                             </Badge>
+//                           </div>
+//                           <p className="text-sm mb-2">{action.action}</p>
+//                           <p className="text-xs text-muted-foreground">
+//                             {action.impact}
+//                           </p>
+//                         </div>
+//                       )
+//                     )
+//                   ) : (
+//                     <p className="text-muted-foreground text-sm">
+//                       No recommended actions
+//                     </p>
+//                   )}
+//                 </div>
+//               </CardContent>
+//             </Card>
+//           </>
+//         ) : (
+//           <div className="text-center py-12">
+//             <Search className="w-12 h-12 mx-auto text-muted-foreground mb-4 animate-spin" />
+//             <p className="text-muted-foreground">
+//               Loading keyword analytics...
+//             </p>
+//           </div>
+//         )
+//       ) : (
+//         <div className="p-6 rounded-lg bg-muted/20 border text-center">
+//           <p className="font-medium">
+//             Keyword "{keyword.keyword}" registered but ID not yet available
+//           </p>
+//           <p className="text-sm text-muted-foreground">
+//             We can't fetch keyword-specific analytics until the backend returns
+//             the keyword ID. Please wait a moment and retry the keyword.
+//           </p>
+//         </div>
+//       )}
+//     </div>
+//   );
+// }

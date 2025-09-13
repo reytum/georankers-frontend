@@ -200,3 +200,20 @@ export const getKeywordAnalytics = async (
     return null;
   }
 };
+
+export const getProductsByApplication = async (
+  applicationId: string,
+  accessToken: string
+): Promise<any> => {
+  try {
+    const res = await API.get(API_ENDPOINTS.getProductsByApplication(applicationId), {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+      },
+    });
+    return res?.data || null;
+  } catch (error) {
+    console.error("getProductsByApplication error:", error);
+    return null;
+  }
+};

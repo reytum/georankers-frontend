@@ -42,10 +42,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /* Restore state from localStorage on refresh */
   useEffect(() => {
     const storedAppId = localStorage.getItem("application_id");
+    const storedToken = localStorage.getItem("access_token");
+    
+    console.log("AuthProvider useEffect - storedAppId:", storedAppId);
+    console.log("AuthProvider useEffect - storedToken:", storedToken ? "present" : "missing");
+    
     if (storedAppId) {
       setApplicationId(storedAppId);
     }
-    // Optionally: you could fetch /me endpoint here to hydrate `user`
+    
+    // If we have a token, restore user state (user is logged in)
+    if (storedToken) {
+      console.log("Token found, restoring user state");
+      setUser({ id: "restored", email: "user@restored.com", first_name: "User", last_name: "Restored" });
+    }
   }, []);
 
   /* =====================
