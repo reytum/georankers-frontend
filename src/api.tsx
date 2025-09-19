@@ -1,6 +1,6 @@
 // api.tsx
-export const BASE_URL = import.meta.env.VITE_BASE_URL;
-
+export const BASE_URL =
+  import.meta.env.VITE_BASE_URL || "/api"; // fallback to /api
 
 export const API_ENDPOINTS = {
   // Auth
@@ -19,5 +19,5 @@ export const API_ENDPOINTS = {
 
   // Product by Application ID
   getProductsByApplication: (applicationId: string) =>
-    `${BASE_URL}/products/application/${applicationId}`
+    `${BASE_URL}/products/application/${applicationId}`,
 };
