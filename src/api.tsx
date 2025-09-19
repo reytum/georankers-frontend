@@ -1,4 +1,6 @@
-export const BASE_URL = "/api/v1";
+import axios from "axios";
+
+const API_BASE = import.meta.env.VITE_BASE_URL;
 
 export const API_ENDPOINTS = {
   // Auth
