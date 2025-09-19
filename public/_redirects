@@ -1,1 +1,1 @@
-/api/v1/*   https://34.131.146.38:8080/api/v1/:splat   200
+/api/*   https://34.131.146.38:8080/api/:splat   200
