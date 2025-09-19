@@ -1,4 +1,4 @@
-export const BASE_URL = "/api/v1";
+export const BASE_URL = "/api";
 
 export const API_ENDPOINTS = {
   // Auth
