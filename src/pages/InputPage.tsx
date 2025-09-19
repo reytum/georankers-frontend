@@ -355,7 +355,7 @@ export default function InputPage() {
                   </Button>
 
                   {/* Example Link */}
-                  <div className="text-center">
+                  {/* <div className="text-center">
                     <Button
                       type="button"
                       variant="link"
@@ -365,7 +365,7 @@ export default function InputPage() {
                       <ExternalLink className="mr-2 h-4 w-4" />
                       See example output
                     </Button>
-                  </div>
+                  </div> */}
                 </form>
 
                 {/* Output Preview */}

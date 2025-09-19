@@ -1,4 +1,6 @@
-export const BASE_URL = "http://localhost:8080/api/v1";
+// api.tsx
+export const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 
 export const API_ENDPOINTS = {
   // Auth
@@ -13,7 +15,7 @@ export const API_ENDPOINTS = {
     `${BASE_URL}/analytics/keywords/${keywordId}?date=${date}`,
 
   getProductAnalytics: (productId: string, date: string) =>
-    `${BASE_URL}/analytics/products/${productId}?date=${date}`,
+    `${BASE_URL}/products/analytics/${productId}`,
 
   // Product by Application ID
   getProductsByApplication: (applicationId: string) =>

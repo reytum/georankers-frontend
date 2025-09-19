@@ -1,4 +1,4 @@
-# Step 1: Use Node.js as the base image
+# Step 1: Build Vite app
 FROM node:18-alpine AS build
 
 WORKDIR /app
@@ -12,10 +12,14 @@ RUN npm install
 # Copy project files
 COPY . .
 
-# Build the Vite app
+# Accept env var from docker-compose (build-time)
+ARG VITE_BASE_URL
+ENV VITE_BASE_URL=$VITE_BASE_URL
+
+# Build the Vite app (env vars baked in)
 RUN npm run build
 
-# Step 2: Use a lightweight server (nginx) for production
+# Step 2: Serve with nginx
 FROM nginx:alpine
 
 # Copy build output to nginx html dir
@@ -24,6 +28,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Copy default nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
+# nginx serves on port 80
 EXPOSE 5173
 
 CMD ["nginx", "-g", "daemon off;"]

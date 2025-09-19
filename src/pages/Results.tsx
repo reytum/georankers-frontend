@@ -30,7 +30,7 @@ interface InputStateAny {
 interface InsightCard {
   title: string;
   value: string;
-  trend?: "up" | "down" | "stable" | "unknown";
+  trend?: "up" | "down" | "stable" | "unknown" | "emerging" | "consistent" | "increasing" | "maintained";
   description?: string;
 }
 
@@ -42,9 +42,20 @@ interface RecommendedAction {
   effort?: string;
 }
 
+// New interface for the API response structure
+interface AnalyticsResponse {
+  analytics: AnalyticsData[];
+  count: number;
+  limit: number;
+  product_id: string;
+}
+
+// Updated AnalyticsData interface
 interface AnalyticsData {
   id?: string;
-  type?: string;
+  product_id?: string;
+  product_name?: string;
+  date?: string;
   status?: string;
   analytics?: {
     insight_cards?: InsightCard[];
@@ -68,7 +79,8 @@ interface ResultsData {
 
 export default function Results() {
   const [resultsData, setResultsData] = useState<ResultsData | null>(null);
-  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [analyticsResponse, setAnalyticsResponse] = useState<AnalyticsResponse | null>(null);
+  const [currentAnalytics, setCurrentAnalytics] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   const { user } = useAuth();
@@ -99,11 +111,18 @@ export default function Results() {
   };
 
   const getTrendIcon = (trend?: string) => {
-    switch ((trend || "").toLowerCase()) {
+    const trendLower = (trend || "").toLowerCase();
+    switch (trendLower) {
       case "up":
+      case "increasing":
+      case "emerging":
         return <TrendingUp className="w-4 h-4 text-green-500" />;
       case "down":
         return <TrendingDown className="w-4 h-4 text-red-500" />;
+      case "stable":
+      case "consistent":
+      case "maintained":
+        return <Minus className="w-4 h-4 text-blue-500" />;
       default:
         return <Minus className="w-4 h-4 text-muted-foreground" />;
     }
@@ -118,6 +137,21 @@ export default function Results() {
       hour: "2-digit",
       minute: "2-digit",
     });
+  };
+
+  const getCleanDomainName = (url?: string) => {
+    if (!url) return "";
+    try {
+      // Remove protocol if present
+      const cleanUrl = url.replace(/^https?:\/\//, "");
+      // Remove www. if present
+      const withoutWww = cleanUrl.replace(/^www\./, "");
+      // Remove trailing slash and any path
+      const domain = withoutWww.split('/')[0];
+      return domain;
+    } catch {
+      return url;
+    }
   };
 
   // Parse and normalize location.state
@@ -171,7 +205,7 @@ export default function Results() {
     };
   }, []);
 
-  // Poll product analytics
+  // Updated poll product analytics function
   const pollProductAnalytics = useCallback(
     async (productId: string) => {
       if (!productId || !accessToken || !mountedRef.current) return;
@@ -181,9 +215,16 @@ export default function Results() {
         const res = await getProductAnalytics(productId, today, accessToken);
         if (!mountedRef.current) return;
 
-        if (res) setAnalyticsData(res);
+        if (res) {
+          setAnalyticsResponse(res);
+          // Extract the first analytics item from the array
+          if (res.analytics && res.analytics.length > 0) {
+            setCurrentAnalytics(res.analytics[0]);
+          }
+        }
 
-        const status = res?.status?.toLowerCase() || "";
+        // Check status from the first analytics item
+        const status = res?.analytics?.[0]?.status?.toLowerCase() || "";
         if (status !== "completed") {
           if (pollingRef.current.productTimer) {
             clearTimeout(pollingRef.current.productTimer);
@@ -231,7 +272,14 @@ export default function Results() {
     );
   }
 
-  const overallStatus = analyticsData?.status || "pending";
+  const overallStatus = currentAnalytics?.status || "pending";
+  
+  // Get the clean website name from either the current analytics or results data
+  const websiteName = getCleanDomainName(
+    currentAnalytics?.product_name || 
+    resultsData.website || 
+    resultsData.product.name
+  );
 
   return (
     <Layout>
@@ -243,14 +291,14 @@ export default function Results() {
               {/* Brand Info */}
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-lg bg-gradient-hero flex items-center justify-center text-white font-bold">
-                  {resultsData.website?.charAt(0)?.toUpperCase() || "G"}
+                  {websiteName?.charAt(0)?.toUpperCase() || "C"}
                 </div>
                 <div>
                   <h1 className="font-semibold text-lg">
-                    {resultsData.website || resultsData.product.name}
+                    {websiteName || "Unknown Website"}
                   </h1>
                   <p className="text-sm text-muted-foreground">
-                    Analysis completed on {formatDate(analyticsData?.updated_at)}
+                    Analysis completed on {formatDate(currentAnalytics?.updated_at || currentAnalytics?.date)}
                   </p>
                 </div>
               </div>
@@ -278,7 +326,7 @@ export default function Results() {
 
         {/* Main */}
         <div className="container mx-auto px-4 py-8">
-          <div className="mb-6">
+          {/* <div className="mb-6">
             <Button
               variant="ghost"
               onClick={() => navigate("/input")}
@@ -287,7 +335,7 @@ export default function Results() {
               <ArrowLeft className="w-4 h-4 mr-2" />
               New Analysis
             </Button>
-          </div>
+          </div> */}
 
           {/* Show banner when analyzing */}
           {overallStatus !== "completed" && (
@@ -307,11 +355,11 @@ export default function Results() {
           )}
 
           {/* Content */}
-          {analyticsData ? (
+          {currentAnalytics ? (
             <>
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-                {(analyticsData.analytics?.insight_cards || []).length > 0 ? (
-                  analyticsData.analytics!.insight_cards!.map((card, i) => (
+                {(currentAnalytics.analytics?.insight_cards || []).length > 0 ? (
+                  currentAnalytics.analytics!.insight_cards!.map((card, i) => (
                     <Card key={i} className="card-gradient border-0">
                       <CardContent className="p-6">
                         <div className="flex items-center justify-between mb-3">
@@ -345,9 +393,9 @@ export default function Results() {
                     Recommended Actions
                   </h3>
                   <div className="space-y-4">
-                    {(analyticsData.analytics?.recommended_actions || [])
+                    {(currentAnalytics.analytics?.recommended_actions || [])
                       .length > 0 ? (
-                      analyticsData.analytics!.recommended_actions!.map(
+                      currentAnalytics.analytics!.recommended_actions!.map(
                         (action, i) => (
                           <div key={i} className="p-4 rounded-lg bg-accent/50">
                             <div className="flex items-center space-x-2 mb-2">
@@ -390,10 +438,10 @@ export default function Results() {
                     <h3 className="font-semibold mb-4">Query Explorer</h3>
                     <div className="space-y-3">
                       {(
-                        analyticsData.analytics?.drilldowns?.query_explorer ||
+                        currentAnalytics.analytics?.drilldowns?.query_explorer ||
                         []
                       ).length > 0 ? (
-                        analyticsData
+                        currentAnalytics
                           .analytics!.drilldowns!.query_explorer!.slice(0, 8)
                           .map((q, idx) => (
                             <div
@@ -439,9 +487,9 @@ export default function Results() {
                   <CardContent className="p-6">
                     <h3 className="font-semibold mb-4">Top Sources</h3>
                     <div className="space-y-3">
-                      {(analyticsData.analytics?.drilldowns?.sources_list || [])
+                      {(currentAnalytics.analytics?.drilldowns?.sources_list || [])
                         .length > 0 ? (
-                        analyticsData.analytics!.drilldowns!.sources_list!.map(
+                        currentAnalytics.analytics!.drilldowns!.sources_list!.map(
                           (source, i) => (
                             <div
                               key={i}
@@ -489,10 +537,10 @@ export default function Results() {
                   <h3 className="font-semibold mb-4">Key Attributes</h3>
                   <div className="grid gap-4 md:grid-cols-2">
                     {(
-                      analyticsData.analytics?.drilldowns?.attributes_matrix ||
+                      currentAnalytics.analytics?.drilldowns?.attributes_matrix ||
                       []
                     ).length > 0 ? (
-                      analyticsData.analytics!.drilldowns!.attributes_matrix!.map(
+                      currentAnalytics.analytics!.drilldowns!.attributes_matrix!.map(
                         (attr, i) => (
                           <div key={i} className="p-4 rounded-lg bg-accent/30">
                             <div className="flex items-center justify-between mb-2">
