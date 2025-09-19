@@ -1,4 +1,6 @@
-export const BASE_URL = "/api";
+// api.tsx
+export const BASE_URL = import.meta.env.VITE_BASE_URL;
+
 
 export const API_ENDPOINTS = {
   // Auth
