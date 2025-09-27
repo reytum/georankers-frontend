@@ -1,19 +1,15 @@
-// src/pages/Results.tsx
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/auth-context";
 import { Layout } from "@/components/Layout";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import {
-  ArrowLeft,
-  Calendar,
-  Search,
-  TrendingUp,
-  TrendingDown,
-  Minus,
-} from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { BrandHeader } from "@/components/BrandHeader";
+import { OverallInsights } from "@/components/OverallInsights";
+import { SourceAnalysis } from "@/components/SourceAnalysis";
+import { CompetitorAnalysis } from "@/components/CompetitorAnalysis";
+import { ContentImpact } from "@/components/ContentImpact";
+import { Recommendations } from "@/components/Recommendations";
+import { QueryAnalysis } from "@/components/QueryAnalysis";
+import { Search } from "lucide-react";
 import { toast } from "sonner";
 import { getProductAnalytics } from "@/apiHelpers";
 
@@ -27,22 +23,7 @@ interface InputStateAny {
   analytics?: any;
 }
 
-interface InsightCard {
-  title: string;
-  value: string;
-  trend?: "up" | "down" | "stable" | "unknown" | "emerging" | "consistent" | "increasing" | "maintained";
-  description?: string;
-}
-
-interface RecommendedAction {
-  category: string;
-  priority?: string;
-  action?: string;
-  impact?: string;
-  effort?: string;
-}
-
-// New interface for the API response structure
+// Updated interface for the API response structure
 interface AnalyticsResponse {
   analytics: AnalyticsData[];
   count: number;
@@ -50,7 +31,7 @@ interface AnalyticsResponse {
   product_id: string;
 }
 
-// Updated AnalyticsData interface
+// Updated AnalyticsData interface to match the provided JSON structure
 interface AnalyticsData {
   id?: string;
   product_id?: string;
@@ -58,14 +39,111 @@ interface AnalyticsData {
   date?: string;
   status?: string;
   analytics?: {
-    insight_cards?: InsightCard[];
-    recommended_actions?: RecommendedAction[];
-    drilldowns?: {
-      query_explorer?: any[];
-      sources_list?: any[];
-      attributes_matrix?: any[];
+    id?: string;
+    type?: string;
+    status?: string;
+    brand_name?: string;
+    brand_website?: string;
+    model_reported?: {
+      model_name?: string;
+      model_version?: string;
+      report_generated_at?: string;
     };
-    reason_missing?: string;
+    analysis?: {
+      overall_insights?: {
+        ai_visibility?: {
+          tier?: string;
+          ai_visibility_score?: { Value: number };
+          geo_score?: { Value: number };
+          weighted_mentions_total?: { Value: number };
+          distinct_queries_count?: { Value: number };
+          calculation_breakdown?: Array<{
+            query: string;
+            weighted_points_for_brand: { Value: number };
+            explanation: string;
+          }>;
+        };
+        brand_mentions?: {
+          level?: string;
+          mentions_count?: { Value: number };
+          total_sources_checked?: { Value: number };
+        };
+        dominant_sentiment?: {
+          sentiment?: string;
+          statement?: string;
+        };
+        summary?: string;
+      };
+      source_analysis?: Array<{
+        category: string;
+        sources: string[];
+        total_citations: { Value: number };
+        visibility: string;
+        cited_by_models: string[];
+        notes: string;
+      }>;
+      competitor_analysis?: {
+        dimensions?: Array<{
+          dimension: string;
+          top_3_competitors: string[];
+          our_brand_position: { Value: number };
+          our_brand_sentiment: string;
+          evidence_snippet: string;
+        }>;
+        table_1_by_dimension?: Array<{
+          dimension: string;
+          top_5_competitors: Array<{
+            brand: string;
+            visibility_count: { Value: number };
+          }>;
+          our_brand_position: { Value: number };
+          our_brand_visibility_count: { Value: number };
+        }>;
+        table_2_brand_profiles?: Array<{
+          brand_name: string;
+          ai_description: string;
+          ai_sentiment: string;
+          sources: string[];
+          evidence_snippets: string[];
+        }>;
+      };
+      content_impact?: {
+        [key: string]: {
+          top_3_brands?: Array<{
+            brand: string;
+            position: { Value: number };
+            visibility: { Value: number };
+          }>;
+          our_brand_position?: {
+            brand: string;
+            position: { Value: number };
+            visibility: { Value: number };
+          };
+        };
+      };
+      recommendations?: Array<{
+        category: string;
+        action: string;
+        timeframe: string;
+        rationale: string;
+        expected_impact: string;
+        effort: string;
+      }>;
+    };
+    raw_model_outputs_mapped?: Array<{
+      query: string;
+      snippet: string;
+      mention_positions: Array<{
+        brand: string;
+        first_position_index: { Value: number };
+      }>;
+      sources_mentioned: string[];
+    }>;
+    visual_guidance?: {
+      scorecard_note?: string;
+      competitor_table_note?: string;
+      source_chart_note?: string;
+    };
   };
   created_at?: string;
   updated_at?: string;
@@ -82,6 +160,7 @@ export default function Results() {
   const [analyticsResponse, setAnalyticsResponse] = useState<AnalyticsResponse | null>(null);
   const [currentAnalytics, setCurrentAnalytics] = useState<AnalyticsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   const { user } = useAuth();
   const accessToken = localStorage.getItem("access_token") || "";
@@ -90,63 +169,11 @@ export default function Results() {
   const pollingRef = useRef<{ productTimer?: number }>({});
   const mountedRef = useRef(true);
 
-  const getColorClass = (
-    text?: string,
-    type: "priority" | "importance" = "priority"
-  ) => {
-    if (!text) return "";
-    const lower = text.toLowerCase();
-
-    const baseClasses = type === "priority" ? "font-semibold" : "font-medium";
-
-    if (lower.includes("high"))
-      return `${baseClasses} text-white bg-red-500 border-red-500`;
-    if (lower.includes("medium"))
-      return `${baseClasses} text-black bg-yellow-400 border-yellow-400`;
-    if (lower.includes("low"))
-      return `${baseClasses} text-white bg-green-600 border-green-500`;
-
-    // default fallback
-    return `${baseClasses} text-gray-700 bg-gray-100 border-gray-300`;
-  };
-
-  const getTrendIcon = (trend?: string) => {
-    const trendLower = (trend || "").toLowerCase();
-    switch (trendLower) {
-      case "up":
-      case "increasing":
-      case "emerging":
-        return <TrendingUp className="w-4 h-4 text-green-500" />;
-      case "down":
-        return <TrendingDown className="w-4 h-4 text-red-500" />;
-      case "stable":
-      case "consistent":
-      case "maintained":
-        return <Minus className="w-4 h-4 text-blue-500" />;
-      default:
-        return <Minus className="w-4 h-4 text-muted-foreground" />;
-    }
-  };
-
-  const formatDate = (iso?: string) => {
-    const d = iso ? new Date(iso) : new Date();
-    return d.toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  };
-
   const getCleanDomainName = (url?: string) => {
     if (!url) return "";
     try {
-      // Remove protocol if present
       const cleanUrl = url.replace(/^https?:\/\//, "");
-      // Remove www. if present
       const withoutWww = cleanUrl.replace(/^www\./, "");
-      // Remove trailing slash and any path
       const domain = withoutWww.split('/')[0];
       return domain;
     } catch {
@@ -205,38 +232,56 @@ export default function Results() {
     };
   }, []);
 
-  // Updated poll product analytics function
+  // Poll product analytics function
   const pollProductAnalytics = useCallback(
     async (productId: string) => {
       if (!productId || !accessToken || !mountedRef.current) return;
+      
       try {
         setIsLoading(true);
+        setError(null);
+        
         const today = new Date().toISOString().split("T")[0];
         const res = await getProductAnalytics(productId, today, accessToken);
+        
         if (!mountedRef.current) return;
 
-        if (res) {
+        if (res && res.analytics && Array.isArray(res.analytics)) {
           setAnalyticsResponse(res);
-          // Extract the first analytics item from the array
-          if (res.analytics && res.analytics.length > 0) {
-            setCurrentAnalytics(res.analytics[0]);
+          
+          // Find the most recent completed analysis or the first one
+          const completedAnalysis = res.analytics.find(item => 
+            item.status?.toLowerCase() === "completed"
+          );
+          const analysisToUse = completedAnalysis || res.analytics[0];
+          
+          if (analysisToUse) {
+            setCurrentAnalytics(analysisToUse);
           }
-        }
 
-        // Check status from the first analytics item
-        const status = res?.analytics?.[0]?.status?.toLowerCase() || "";
-        if (status !== "completed") {
-          if (pollingRef.current.productTimer) {
-            clearTimeout(pollingRef.current.productTimer);
+          // Check if we need to continue polling
+          const status = analysisToUse?.status?.toLowerCase() || "";
+          if (status !== "completed" && status !== "failed") {
+            if (pollingRef.current.productTimer) {
+              clearTimeout(pollingRef.current.productTimer);
+            }
+            pollingRef.current.productTimer = window.setTimeout(() => {
+              pollProductAnalytics(productId);
+            }, 5000);
+          } else {
+            setIsLoading(false);
+            if (status === "completed") {
+              console.log("Brand analysis completed successfully");
+            } else if (status === "failed") {
+              setError("Analysis failed. Please try again.");
+            }
           }
-          pollingRef.current.productTimer = window.setTimeout(() => {
-            pollProductAnalytics(productId);
-          }, 5000);
         } else {
-          setIsLoading(false);
+          throw new Error("Invalid response format");
         }
       } catch (err) {
-        console.error(err);
+        console.error("Failed to fetch analytics:", err);
+        setError("Failed to fetch analytics. Please try again.");
         toast.error("Failed to fetch analytics");
         setIsLoading(false);
       }
@@ -254,7 +299,7 @@ export default function Results() {
   }, [resultsData, pollProductAnalytics]);
 
   // Loading state
-  if (isLoading || !resultsData) {
+  if (isLoading || !resultsData || error) {
     return (
       <Layout>
         <div className="container mx-auto px-4 py-20">
@@ -272,311 +317,107 @@ export default function Results() {
     );
   }
 
-  const overallStatus = currentAnalytics?.status || "pending";
-  
-  // Get the clean website name from either the current analytics or results data
-  const websiteName = getCleanDomainName(
-    currentAnalytics?.product_name || 
-    resultsData.website || 
-    resultsData.product.name
-  );
-
-  return (
-    <Layout>
-      <div className="min-h-screen">
-        {/* Header */}
-        <div className="sticky top-16 z-40 bg-background/95 backdrop-blur border-b">
-          <div className="container mx-auto px-4 py-4">
-            <div className="flex flex-col space-y-4">
-              {/* Brand Info */}
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 rounded-lg bg-gradient-hero flex items-center justify-center text-white font-bold">
-                  {websiteName?.charAt(0)?.toUpperCase() || "C"}
-                </div>
-                <div>
-                  <h1 className="font-semibold text-lg">
-                    {websiteName || "Unknown Website"}
-                  </h1>
-                  <p className="text-sm text-muted-foreground">
-                    Analysis completed on {formatDate(currentAnalytics?.updated_at || currentAnalytics?.date)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Stats Row */}
-              <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm">
-                <div className="flex items-center space-x-2">
-                  <Search className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">
-                    Keywords analyzed:
-                  </span>
-                  <span className="font-semibold">
-                    {resultsData.search_keywords?.length ?? 0}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Calendar className="w-4 h-4 text-muted-foreground" />
-                  <span className="text-muted-foreground">Status:</span>
-                  <span className="font-semibold">{overallStatus}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Main */}
-        <div className="container mx-auto px-4 py-8">
-          {/* <div className="mb-6">
-            <Button
-              variant="ghost"
-              onClick={() => navigate("/input")}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              <ArrowLeft className="w-4 h-4 mr-2" />
-              New Analysis
-            </Button>
-          </div> */}
-
-          {/* Show banner when analyzing */}
-          {overallStatus !== "completed" && (
-            <div className="mb-6 p-4 rounded-md bg-yellow-50 border border-yellow-200 text-sm">
+  // If no analytics data yet, show the analysis in progress banner
+  if (!currentAnalytics || !currentAnalytics.analytics){
+    return (
+      <Layout>
+        <div className="min-h-screen bg-background">
+          <div className="container mx-auto px-4 py-8">
+            <div className="mb-6 p-4 rounded-md bg-warning/10 border border-warning/20 text-sm">
               <div className="flex items-center gap-3">
                 <Search className="w-5 h-5 animate-spin text-muted-foreground" />
                 <div>
                   <div className="font-semibold">Analysis in progress</div>
                   <div className="text-xs text-muted-foreground">
-                    We are gathering and analyzing AI answers — this usually
-                    takes a few seconds to a couple of minutes depending on
-                    keywords and sources.
+                    We are gathering and analyzing AI answers — this usually takes a few seconds to a couple of minutes.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Extract data for components
+  const analytics = currentAnalytics.analytics;
+  const analysis = analytics?.analysis;
+  
+  // Prepare data for BrandHeader
+  const brandName = analytics?.brand_name || getCleanDomainName(resultsData.website) || "Unknown Brand";
+  const brandWebsite = analytics?.brand_website || resultsData.website || "";
+  const keywordsAnalyzed = analysis?.overall_insights?.ai_visibility?.distinct_queries_count?.Value || resultsData.search_keywords?.length || 0;
+  const status = currentAnalytics.status || "pending";
+  const date = currentAnalytics.updated_at || currentAnalytics.date || new Date().toISOString();
+
+  return (
+    <Layout>
+      <div className="min-h-screen bg-background">
+        <div className="container mx-auto px-4 py-8 space-y-8">
+          {/* Show banner when analyzing */}
+          {status !== "completed" && (
+            <div className="mb-6 p-4 rounded-md bg-warning/10 border border-warning/20 text-sm">
+              <div className="flex items-center gap-3">
+                <Search className="w-5 h-5 animate-spin text-muted-foreground" />
+                <div>
+                  <div className="font-semibold">Analysis in progress</div>
+                  <div className="text-xs text-muted-foreground">
+                    We are gathering and analyzing AI answers — this usually takes a few seconds to a couple of minutes.
                   </div>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Content */}
-          {currentAnalytics ? (
+          <BrandHeader 
+            brandName={brandName}
+            brandWebsite={brandWebsite}
+            keywordsAnalyzed={keywordsAnalyzed}
+            status={status}
+            date={date}
+          />
+          
+          {analysis?.overall_insights && (
             <>
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3 mb-8">
-                {(currentAnalytics.analytics?.insight_cards || []).length > 0 ? (
-                  currentAnalytics.analytics!.insight_cards!.map((card, i) => (
-                    <Card key={i} className="card-gradient border-0">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center space-x-2">
-                            <div className="w-3 h-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-full" />
-                            <span className="text-sm font-medium">
-                              {card.title}
-                            </span>
-                          </div>
-                          {getTrendIcon(card.trend)}
-                        </div>
-                        <div className="text-lg font-semibold mb-2">
-                          {card.value || "—"}
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {card.description}
-                        </p>
-                      </CardContent>
-                    </Card>
-                  ))
-                ) : (
-                  <p className="text-muted-foreground text-sm">
-                    No insight cards available
-                  </p>
-                )}
-              </div>
-
-              <Card className="card-gradient border-0 mb-8">
-                <CardContent className="p-6">
-                  <h3 className="text-xl font-semibold mb-4">
-                    Recommended Actions
-                  </h3>
-                  <div className="space-y-4">
-                    {(currentAnalytics.analytics?.recommended_actions || [])
-                      .length > 0 ? (
-                      currentAnalytics.analytics!.recommended_actions!.map(
-                        (action, i) => (
-                          <div key={i} className="p-4 rounded-lg bg-accent/50">
-                            <div className="flex items-center space-x-2 mb-2">
-                              <Badge
-                                className={`${getColorClass(
-                                  action.priority
-                                )} border`}
-                              >
-                                {(action.priority || "").toUpperCase()}
-                              </Badge>
-                              <span className="font-semibold">
-                                {action.category}
-                              </span>
-                              <Badge
-                                variant="outline"
-                                className={getColorClass(action.effort)}
-                              >
-                                {action.effort} effort
-                              </Badge>
-                            </div>
-                            <p className="text-sm mb-2">{action.action}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {action.impact}
-                            </p>
-                          </div>
-                        )
-                      )
-                    ) : (
-                      <p className="text-muted-foreground text-sm">
-                        No recommended actions
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="grid gap-6 md:grid-cols-2 mb-8">
-                <Card className="card-gradient border-0">
-                  <CardContent className="p-6">
-                    <h3 className="font-semibold mb-4">Query Explorer</h3>
-                    <div className="space-y-3">
-                      {(
-                        currentAnalytics.analytics?.drilldowns?.query_explorer ||
-                        []
-                      ).length > 0 ? (
-                        currentAnalytics
-                          .analytics!.drilldowns!.query_explorer!.slice(0, 8)
-                          .map((q, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-start space-x-2"
-                            >
-                              <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-xs font-medium flex-shrink-0 mt-1">
-                                {q.performance_score}
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-sm">{q.query}</p>
-                                <div className="flex items-center space-x-2 mt-1">
-                                  <Badge
-                                    variant="outline"
-                                    className={`text-xs ${getColorClass(
-                                      q.search_volume
-                                    )}`}
-                                  >
-                                    {q.search_volume}
-                                  </Badge>
-                                  <Badge
-                                    variant="outline"
-                                    className={`text-xs ${getColorClass(
-                                      q.competition
-                                    )}`}
-                                  >
-                                    {q.competition}
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                          ))
-                      ) : (
-                        <p className="text-muted-foreground text-sm">
-                          No queries found
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card className="card-gradient border-0">
-                  <CardContent className="p-6">
-                    <h3 className="font-semibold mb-4">Top Sources</h3>
-                    <div className="space-y-3">
-                      {(currentAnalytics.analytics?.drilldowns?.sources_list || [])
-                        .length > 0 ? (
-                        currentAnalytics.analytics!.drilldowns!.sources_list!.map(
-                          (source, i) => (
-                            <div
-                              key={i}
-                              className="flex items-center justify-between"
-                            >
-                              <div className="flex-1">
-                                <p className="text-sm font-medium">
-                                  {source.source}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {source.url}
-                                </p>
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <Badge variant="outline">
-                                  {source.frequency}
-                                </Badge>
-                                <div className="w-16 h-2 bg-muted rounded-full">
-                                  <div
-                                    className="h-full bg-primary rounded-full"
-                                    style={{
-                                      width: `${Math.min(
-                                        (source.relevance_score / 10) * 100,
-                                        100
-                                      )}%`,
-                                    }}
-                                  />
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        )
-                      ) : (
-                        <p className="text-muted-foreground text-sm">
-                          No sources found
-                        </p>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <Card className="card-gradient border-0">
-                <CardContent className="p-6">
-                  <h3 className="font-semibold mb-4">Key Attributes</h3>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    {(
-                      currentAnalytics.analytics?.drilldowns?.attributes_matrix ||
-                      []
-                    ).length > 0 ? (
-                      currentAnalytics.analytics!.drilldowns!.attributes_matrix!.map(
-                        (attr, i) => (
-                          <div key={i} className="p-4 rounded-lg bg-accent/30">
-                            <div className="flex items-center justify-between mb-2">
-                              <h4 className="font-medium">{attr.attribute}</h4>
-                              <Badge
-                                className={getColorClass(
-                                  attr.importance,
-                                  "importance"
-                                )}
-                              >
-                                {(attr.importance || "").toUpperCase()}
-                              </Badge>
-                            </div>
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {attr.value}
-                            </p>
-                            <div className="flex items-center space-x-2">
-                              <span className="text-xs">Frequency:</span>
-                              <Badge variant="outline">{attr.frequency}</Badge>
-                            </div>
-                          </div>
-                        )
-                      )
-                    ) : (
-                      <p className="text-muted-foreground text-sm">
-                        No attributes found
-                      </p>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
+            <OverallInsights insights={analysis.overall_insights} />
+            <div className="border-t border-foreground my-12" />
             </>
-          ) : (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">No analytics data available</p>
-            </div>
+          )}
+          
+          {analysis?.source_analysis && (
+            <>
+            <SourceAnalysis sources={analysis.source_analysis} />
+            <div className="border-t border-foreground my-12" />
+            </>
+          )}
+          
+          {analysis?.competitor_analysis && (
+            <>
+            <CompetitorAnalysis analysis={analysis.competitor_analysis} />
+            <div className="border-t border-foreground my-12" />
+            </>
+          )}
+          
+          {analysis?.content_impact && (
+            <>
+            <ContentImpact contentImpact={analysis.content_impact} />
+            <div className="border-t border-foreground my-12" />
+            </>
+          )}
+          
+          {analysis?.recommendations && (
+            <>
+            <Recommendations recommendations={analysis.recommendations} />
+            <div className="border-t border-foreground my-12" />
+            </>
+          )}
+          
+          {analytics?.raw_model_outputs_mapped && (
+            <>
+            <QueryAnalysis rawOutputs={analytics.raw_model_outputs_mapped} />
+            <div className="border-t border-foreground my-8" />
+            </>
           )}
         </div>
       </div>
