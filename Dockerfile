@@ -5,8 +5,6 @@ WORKDIR /app
 
 # Copy dependency files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
 # Copy project files
@@ -28,7 +26,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 # Copy default nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# nginx serves on port 80
-EXPOSE 5173
+# nginx serves on port 80 (not 5173!)
+EXPOSE 80
 
 CMD ["nginx", "-g", "daemon off;"]
