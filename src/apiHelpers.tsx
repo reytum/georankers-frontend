@@ -1,6 +1,7 @@
 // src/apiHelpers.tsx
 import axios, { AxiosResponse } from "axios";
 import { API_ENDPOINTS } from "./api";
+import { encryptPasswordSimple } from "@/lib/password-utils";
 
 /* =====================
    TYPES
@@ -60,7 +61,7 @@ export interface ProductPayload {
    AXIOS CONFIG
    ===================== */
 const API = axios.create({
-  baseURL: "http://localhost:8080/api/v1",
+  baseURL: import.meta.env.VITE_BASE_URL || "https://georankers.co/api/v1",
 });
 
 API.interceptors.request.use((config) => {
@@ -79,7 +80,13 @@ API.interceptors.request.use((config) => {
    ===================== */
 export const login = async (payload: LoginRequest): Promise<LoginResponse | null> => {
   try {
-    const res: AxiosResponse<LoginResponse> = await API.post(API_ENDPOINTS.login, payload);
+    // Encrypt the password before sending
+    const encryptedPayload = {
+      email: payload.email,
+      password: encryptPasswordSimple(payload.password)
+    };
+
+    const res: AxiosResponse<LoginResponse> = await API.post(API_ENDPOINTS.login, encryptedPayload);
 
     if (res.data.access_token) {
       localStorage.setItem("access_token", res.data.access_token);
@@ -98,7 +105,16 @@ export const login = async (payload: LoginRequest): Promise<LoginResponse | null
 
 export const register = async (payload: RegisterRequest): Promise<RegisterResponse | null> => {
   try {
-    const res: AxiosResponse<RegisterResponse> = await API.post(API_ENDPOINTS.register, payload);
+    // Encrypt the password before sending
+    const encryptedPayload = {
+      email: payload.email,
+      password: encryptPasswordSimple(payload.password),
+      first_name: payload.first_name,
+      last_name: payload.last_name,
+      app_name: payload.app_name
+    };
+
+    const res: AxiosResponse<RegisterResponse> = await API.post(API_ENDPOINTS.register, encryptedPayload);
 
     if (res.data.access_token) {
       localStorage.setItem("access_token", res.data.access_token);
