@@ -29,7 +29,7 @@ COPY --from=build /app/dist /usr/share/nginx/html
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Add security headers and SPA support
-RUN echo 'server_tokens off;' >> /etc/nginx/nginx.conf
+RUN sed -i '/http {/a\    server_tokens off;' /etc/nginx/nginx.conf
 
 # nginx serves on port 80
 EXPOSE 80
