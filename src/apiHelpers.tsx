@@ -19,6 +19,7 @@ export interface LoginResponse {
     email: string;
     first_name: string;
     last_name: string;
+    email_verified: boolean;
     owned_applications?: { id: string; company_name: string; project_token: string }[];
   };
 }
@@ -37,6 +38,7 @@ export interface RegisterResponse {
     email: string;
     first_name: string;
     last_name: string;
+    email_verified: boolean;
   };
   application: {
     id: string;
@@ -78,29 +80,26 @@ API.interceptors.request.use((config) => {
 /* =====================
    AUTH HELPERS
    ===================== */
-export const login = async (payload: LoginRequest): Promise<LoginResponse | null> => {
-  try {
-    // Encrypt the password before sending
-    const encryptedPayload = {
-      email: payload.email,
-      password: encryptPasswordSimple(payload.password)
-    };
+export const login = async (payload: LoginRequest): Promise<LoginResponse> => {
+  // Encrypt the password before sending
+  const encryptedPayload = {
+    email: payload.email,
+    password: encryptPasswordSimple(payload.password)
+  };
 
-    const res: AxiosResponse<LoginResponse> = await API.post(API_ENDPOINTS.login, encryptedPayload);
+  const res: AxiosResponse<LoginResponse> = await API.post(API_ENDPOINTS.login, encryptedPayload);
 
-    if (res.data.access_token) {
-      localStorage.setItem("access_token", res.data.access_token);
+  // Check if we got an access token (only provided for verified users)
+  if (res.data.access_token) {
+    localStorage.setItem("access_token", res.data.access_token);
 
-      const appId = res.data.user?.owned_applications?.[0]?.id;
-      if (appId) {
-        localStorage.setItem("application_id", appId);
-      }
+    const appId = res.data.user?.owned_applications?.[0]?.id;
+    if (appId) {
+      localStorage.setItem("application_id", appId);
     }
-
-    return res.data;
-  } catch (error) {
-    return null;
   }
+
+  return res.data;
 };
 
 export const register = async (payload: RegisterRequest): Promise<RegisterResponse | null> => {

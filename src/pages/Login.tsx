@@ -20,17 +20,36 @@ const Login = () => {
     e.preventDefault();
     try {
       await login(email, password);
-      toast({
-        title: "Welcome back!",
-        description: "You've successfully logged in.",
-      });
+      
+      // Check email verification status from localStorage
+      const userData = JSON.parse(localStorage.getItem("user_data") || "{}");
+      const accessToken = localStorage.getItem("access_token");
+      
+      if (!userData.email_verified || !accessToken) {
+        // Email not verified - show message but don't treat as error
+        toast({
+          title: "Email Verification Required",
+          description: "Please check your email inbox for the verification link we just sent you.",
+          duration: 6000,
+        });
+      } else {
+        // Email verified and has token - successful login
+        toast({
+          title: "Welcome back!",
+          description: "You've successfully logged in.",
+        });
+      }
+      
       setTimeout(() => {
         navigate("/");
       }, 100);
-    } catch (error) {
+    } catch (error: any) {
+      // Only actual errors (wrong credentials, server error, etc.)
+      const errorMessage = error?.message || error?.response?.data?.error || "Please check your credentials and try again.";
+      
       toast({
         title: "Login failed",
-        description: "Please check your credentials and try again.",
+        description: errorMessage,
         variant: "destructive",
       });
     }
@@ -89,6 +108,16 @@ const Login = () => {
                 </Button>
               </div>
             </div>
+            
+            <div className="flex items-center justify-end">
+              <Link
+                to="/forgot-password"
+                className="text-sm text-primary hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+
             <Button
               type="submit"
               className="w-full bg-gradient-primary hover:opacity-90 transition-opacity"

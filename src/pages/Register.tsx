@@ -49,12 +49,13 @@ const Register = () => {
     try {
       await register(email, password, fullName);
       toast({
-        title: "Account created!",
-        description: "Welcome to AI Search Visibility Checker.",
+        title: "Registration Successful!",
+        description: "Please check your email to verify your account before logging in.",
+        duration: 6000,
       });
       setTimeout(() => {
-        navigate("/");
-      }, 100);
+        navigate("/login");
+      }, 2000);
     } catch (error) {
       toast({
         title: "Registration failed",

@@ -12,6 +12,7 @@ import {
    ===================== */
 interface ExtendedUser extends NonNullable<LoginResponse["user"]> {
   owned_applications?: { id: string; company_name: string; project_token: string }[];
+  email_verified: boolean;
 }
 
 interface AuthContextType {
@@ -66,12 +67,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await loginAPI({ email, password });
 
-      if (res.user) {
+      if (res && res.user) {
         const extendedUser = res.user as ExtendedUser;
         setUser(extendedUser);
 
-        // Save first name to localStorage
+        // Save first name and user data to localStorage
         localStorage.setItem("first_name", extendedUser.first_name);
+        localStorage.setItem("user_data", JSON.stringify({
+          email_verified: extendedUser.email_verified,
+          email: extendedUser.email,
+          id: extendedUser.id
+        }));
 
         // Pick applicationId from response (apiHelpers already saves it to localStorage)
         let appId: string | null = null;
@@ -85,7 +91,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setApplicationId(appId);
         }
 
-        console.log("Login completed successfully");
+        console.log("Login completed successfully", {
+          email_verified: extendedUser.email_verified,
+          has_token: !!res.access_token
+        });
       }
     } finally {
       setIsLoading(false);
@@ -117,17 +126,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const response: RegisterResponse = await registerAPI(payload);
 
-      if (response.application?.id) {
-        setApplicationId(response.application.id);
-      }
-
-      // Save first name to localStorage
-      localStorage.setItem("first_name", firstName);
-
-      // Auto-login (ensures consistency with login flow)
-      await login(email, password);
+      // Note: We don't auto-login anymore since user needs to verify email first
+      // No access_token will be returned until email is verified
       
-      console.log("Registration completed successfully");
+      console.log("Registration completed successfully - please verify email");
+    } catch (error: any) {
+      // Re-throw error to be handled by the component
+      throw error;
     } finally {
       setIsLoading(false);
     }
@@ -140,6 +145,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("access_token");
     localStorage.removeItem("application_id");
     localStorage.removeItem("first_name");
+    localStorage.removeItem("user_data");
     localStorage.removeItem("keywords");
     localStorage.removeItem("keyword_count");
     localStorage.removeItem("product_id");
